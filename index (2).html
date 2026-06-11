@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coaco Bean Fermentation Analyzer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Teachable Machine JS libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:     #fdf6e3;
+      --parchment: #f2e8cc;
+      --coaco-dk:  #2c1a0e;
+      --coaco-md:  #5c3317;
+      --coaco-lt:  #9b6b3a;
+      --gold:      #c8962e;
+      --gold-lt:   #e8be60;
+      --text:      #2c1a0e;
+      --muted:     #7a5c3a;
+      --under:     #b85c00;
+      --perfect:   #2d7a3a;
+      --over:      #8b0000;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        linear-gradient(rgba(20,10,5,0.72), rgba(20,10,5,0.72)),
+        url('https://upload.wikimedia.org/wikipedia/commons/2/2e/Cocoa_beans.jpg')
+        center/cover no-repeat fixed;
+    }
+
+    .shell {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 48px 20px 60px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .eyebrow {
+      display: inline-block;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--gold-lt);
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      line-height: 1.15;
+      color: var(--cream);
+      margin-bottom: 10px;
+    }
+    .subtitle {
+      font-size: .92rem;
+      color: rgba(253,246,227,.65);
+      max-width: 420px;
+      margin: 0 auto;
+      line-height: 1.55;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--cream);
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.45), 0 0 0 1px rgba(200,150,46,.18);
+    }
+
+    /* ── Mode tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--parchment);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 24px;
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 9px;
+      text-align: center;
+      font-size: .88rem;
+      font-weight: 600;
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: background .2s, color .2s;
+      user-select: none;
+    }
+    .tab.active {
+      background: var(--coaco-md);
+      color: var(--cream);
+    }
+
+    /* ── Upload zone ── */
+    .upload-zone {
+      border: 2px dashed var(--coaco-lt);
+      border-radius: 12px;
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .upload-zone:hover { border-color: var(--gold); background: rgba(200,150,46,.06); }
+    .upload-zone input {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-icon { font-size: 2rem; margin-bottom: 6px; }
+    .upload-label { font-size: .9rem; color: var(--muted); }
+    .upload-label strong { color: var(--coaco-md); }
+
+    /* ── Webcam ── */
+    video {
+      width: 100%;
+      border-radius: 10px;
+      border: 2px solid var(--coaco-lt);
+      display: none;
+      margin-bottom: 14px;
+    }
+
+    /* ── Preview ── */
+    #previewImage {
+      width: 100%;
+      border-radius: 10px;
+      border: 2px solid var(--coaco-lt);
+      display: none;
+      margin-bottom: 18px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      width: 100%;
+      padding: 13px;
+      font-family: 'Inter', sans-serif;
+      font-size: .95rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      margin-bottom: 12px;
+    }
+    .btn:active { transform: scale(.985); }
+    .btn-capture {
+      background: var(--parchment);
+      color: var(--coaco-dk);
+      border: 1.5px solid var(--coaco-lt);
+      display: none;
+    }
+    .btn-analyze {
+      background: var(--coaco-md);
+      color: var(--cream);
+      letter-spacing: .03em;
+    }
+    .btn-analyze:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-analyze:not(:disabled):hover { opacity: .88; }
+
+    /* ── Result ── */
+    .result-box {
+      margin-top: 6px;
+      padding: 22px 24px;
+      border-radius: 12px;
+      border: 1.5px solid var(--parchment);
+      background: #fffdf5;
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--text);
+      min-height: 72px;
+    }
+    .result-placeholder {
+      color: var(--muted);
+      font-style: italic;
+      font-size: .92rem;
+    }
+    .result-status {
+      display: inline-block;
+      font-family: 'Playfair Display', serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      padding: 3px 0;
+    }
+    .status-under  { color: var(--under); }
+    .status-perfect { color: var(--perfect); }
+    .status-over   { color: var(--over); }
+
+    .confidence-bar-wrap {
+      margin-top: 14px;
+      margin-bottom: 2px;
+    }
+    .confidence-label {
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .confidence-bar-track {
+      background: var(--parchment);
+      border-radius: 99px;
+      height: 8px;
+      width: 100%;
+      overflow: hidden;
+    }
+    .confidence-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .6s ease;
+    }
+    .fill-under   { background: var(--under); }
+    .fill-perfect { background: var(--perfect); }
+    .fill-over    { background: var(--over); }
+
+    .raw-value {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: none;
+      width: 28px; height: 28px;
+      border: 3px solid var(--parchment);
+      border-top-color: var(--coaco-md);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Divider ── */
+    .divider {
+      height: 1px;
+      background: var(--parchment);
+      margin: 22px 0;
+    }
+
+    /* ── Footer note ── */
+    .footer-note {
+      text-align: center;
+      font-size: .75rem;
+      color: rgba(253,246,227,.4);
+      margin-top: 28px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="header">
+    <h1>Coaco Bean Fermentation Analyzer</h1>
+    <p class="subtitle">Photograph your beans and get an instant fermentation assessment powered by machine learning.</p>
+  </div>
+
+  <div class="card">
+
+    <div class="tabs">
+      <div class="tab active" id="tabUpload" onclick="switchMode('upload')">📁 Upload Image</div>
+      <div class="tab" id="tabWebcam" onclick="switchMode('webcam')">📷 Use Camera</div>
+    </div>
+
+    <!-- Upload zone -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="imageUpload" accept="image/*">
+      <div class="upload-icon">🍫</div>
+      <div class="upload-label"><strong>Click to choose</strong> or drag an image here</div>
+    </div>
+
+    <!-- Webcam -->
+    <video id="webcam" autoplay playsinline></video>
+    <button class="btn btn-capture" id="captureBtn" onclick="captureWebcam()">Take Photo</button>
+
+    <!-- Preview -->
+    <img id="previewImage" alt="Preview">
+
+    <div class="divider"></div>
+
+    <div class="spinner" id="spinner"></div>
+    <button class="btn btn-analyze" id="analyzeBtn" onclick="analyzeImage()">Analyze Fermentation</button>
+
+    <div class="result-box" id="resultBox">
+      <span class="result-placeholder">Upload or capture an image to begin analysis.</span>
+    </div>
+
+  </div>
+
+  <p class="footer-note">Results are generated by a trained ML model — not estimated from color alone.</p>
+
+</div>
+
+<script>
+  // ─────────────────────────────────────────────
+  // ▼▼ PASTE YOUR TEACHABLE MACHINE MODEL URL BELOW ▼▼
+  const MODEL_URL = "";
+  // Example: "https://teachablemachine.withgoogle.com/models/XXXXXXXXX/"
+  // ─────────────────────────────────────────────
+
+  let model = null;
+  let webcamStream = null;
+
+  // Load model on page start if URL is set
+  async function loadModel() {
+    if (!MODEL_URL) return;
+    try {
+      const modelJSON = MODEL_URL + "model.json";
+      const metadataJSON = MODEL_URL + "metadata.json";
+      model = await tmImage.load(modelJSON, metadataJSON);
+      console.log("Model loaded successfully.");
+    } catch (e) {
+      console.warn("Model failed to load:", e);
+    }
+  }
+  loadModel();
+
+  // ── Mode switching ──
+  function switchMode(mode) {
+    document.getElementById("tabUpload").classList.toggle("active", mode === "upload");
+    document.getElementById("tabWebcam").classList.toggle("active", mode === "webcam");
+
+    const uploadZone = document.getElementById("uploadZone");
+    const webcam = document.getElementById("webcam");
+    const captureBtn = document.getElementById("captureBtn");
+
+    if (mode === "upload") {
+      uploadZone.style.display = "block";
+      webcam.style.display = "none";
+      captureBtn.style.display = "none";
+      if (webcamStream) webcamStream.getTracks().forEach(t => t.stop());
+    } else {
+      uploadZone.style.display = "none";
+      startWebcam();
+    }
+  }
+
+  async function startWebcam() {
+    const webcam = document.getElementById("webcam");
+    const captureBtn = document.getElementById("captureBtn");
+    webcam.style.display = "block";
+    captureBtn.style.display = "block";
+    try {
+      webcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      webcam.srcObject = webcamStream;
+    } catch (err) {
+      alert("Camera access blocked. Please enable camera permissions in your browser.");
+    }
+  }
+
+  function captureWebcam() {
+    const video = document.getElementById("webcam");
+    const preview = document.getElementById("previewImage");
+    if (!video.videoWidth) { alert("Camera not ready yet — try again in a moment."); return; }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    preview.src = canvas.toDataURL();
+    preview.style.display = "block";
+  }
+
+  document.getElementById("imageUpload").addEventListener("change", function () {
+    const preview = document.getElementById("previewImage");
+    preview.src = URL.createObjectURL(this.files[0]);
+    preview.style.display = "block";
+  });
+
+  // ── Fermentation logic ──
+  function classifyScore(score) {
+    if (score <= 0.9999)      return "under";
+    if (score <= 1.5999)      return "perfect";
+    return "over";
+  }
+
+  const STATUS_LABELS = {
+    under:   "Under-Fermented",
+    perfect: "Perfectly Fermented",
+    over:    "Over-Fermented"
+  };
+
+  const EXCERPTS = {
+    under:   "These beans are under-fermented — their internal heat and aroma have not yet fully developed. The biochemical reactions needed to build rich chocolate flavor are still incomplete. They need additional time in the fermentation boxes before moving to the drying stage.",
+    perfect: "These beans are perfectly fermented, showing the ideal color and aroma profile for premium chocolate production. The pulp has broken down correctly and complex flavor precursors have formed throughout the bean. They are ready to be laid out for drying to lock in this optimal quality.",
+    over:    "These beans are over-fermented and are at risk of developing off-flavors and structural breakdown. Excessive microbial activity has likely degraded the delicate flavor compounds needed for fine chocolate. They should be separated from the batch and moved to drying immediately to limit further damage."
+  };
+
+  async function analyzeImage() {
+    const preview = document.getElementById("previewImage");
+    const resultBox = document.getElementById("resultBox");
+    const spinner = document.getElementById("spinner");
+    const analyzeBtn = document.getElementById("analyzeBtn");
+
+    if (!preview.src || preview.style.display === "none") {
+      resultBox.innerHTML = '<span class="result-placeholder">Please upload or capture an image first.</span>';
+      return;
+    }
+
+    if (!MODEL_URL) {
+      resultBox.innerHTML = '<span class="result-placeholder" style="color:#8b0000;">⚠️ No model URL set. Open the HTML file and paste your Teachable Machine URL into the MODEL_URL variable at the top of the script.</span>';
+      return;
+    }
+
+    if (!model) {
+      resultBox.innerHTML = '<span class="result-placeholder">Model is still loading — please wait a moment and try again.</span>';
+      return;
+    }
+
+    // Show loading state
+    spinner.style.display = "block";
+    analyzeBtn.disabled = true;
+    resultBox.innerHTML = "";
+
+    try {
+      // Run prediction through Teachable Machine model
+      const predictions = await model.predict(preview);
+
+      // Teachable Machine returns array: [{className, probability}, ...]
+      // Find the top prediction
+      let top = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
+
+      // The model returns a class name and probability (0–1).
+      // We map probability to your 0–2+ scale: multiply by 2 to get a 0–2 range.
+      // Adjust the multiplier below if your model's scale differs.
+      const rawScore = top.probability * 2;
+      const status = classifyScore(rawScore);
+
+      const statusLabel = STATUS_LABELS[status];
+      const excerpt = EXCERPTS[status];
+      const confidencePct = Math.round(top.probability * 100);
+
+      const fillClass = `fill-${status}`;
+      const statusClass = `status-${status}`;
+
+      resultBox.innerHTML = `
+        <div class="result-status ${statusClass}">${statusLabel}</div>
+        <p>${excerpt}</p>
+        <div class="confidence-bar-wrap">
+          <div class="confidence-label">Model Confidence</div>
+          <div class="confidence-bar-track">
+            <div class="confidence-bar-fill ${fillClass}" style="width: ${confidencePct}%"></div>
+          </div>
+          <div class="raw-value">Raw model score: ${rawScore.toFixed(4)} &nbsp;|&nbsp; Confidence: ${confidencePct}%</div>
+        </div>
+      `;
+    } catch (err) {
+      resultBox.innerHTML = `<span class="result-placeholder" style="color:#8b0000;">⚠️ Analysis failed: ${err.message}</span>`;
+    }
+
+    spinner.style.display = "none";
+    analyzeBtn.disabled = false;
+  }
+</script>
+
+</body>
+</html>
